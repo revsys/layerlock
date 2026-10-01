@@ -1,0 +1,140 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Run tests
+        run: cargo test --locked --verbose --all-features
+
+  release:
+    needs: test
+    name: Release - ${{ matrix.platform.release_for }}
+    runs-on: ${{ matrix.platform.os }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - release_for: Linux-x86_64
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: layerlock
+            asset_name: layerlock-linux-x86_64
+
+          - release_for: Linux-x86_64-musl
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            binary: layerlock
+            asset_name: layerlock-linux-x86_64-musl
+
+          - release_for: macOS-x86_64
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+            binary: layerlock
+            asset_name: layerlock-macos-x86_64
+
+          - release_for: macOS-aarch64
+            os: macos-14
+            target: aarch64-apple-darwin
+            binary: layerlock
+            asset_name: layerlock-macos-aarch64
+
+          - release_for: Windows-x86_64
+            os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: layerlock.exe
+            asset_name: layerlock-windows-x86_64.exe
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform.target }}
+
+      - name: Install musl tools
+        if: matrix.platform.target == 'x86_64-unknown-linux-musl'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools
+
+      - name: Build
+        run: cargo build --locked --release --bin layerlock --target ${{ matrix.platform.target }}
+
+      - name: Strip binary (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: strip target/${{ matrix.platform.target }}/release/${{ matrix.platform.binary }}
+
+      - name: Stage release binary
+        shell: bash
+        run: cp "target/${{ matrix.platform.target }}/release/${{ matrix.platform.binary }}" "${{ matrix.platform.asset_name }}"
+
+      - name: Generate SHA256 checksum (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: shasum -a 256 "${{ matrix.platform.asset_name }}" > "${{ matrix.platform.asset_name }}.sha256"
+
+      - name: Generate SHA256 checksum (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $asset = '${{ matrix.platform.asset_name }}'
+          $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $asset" | Set-Content -Encoding ascii "$asset.sha256"
+
+      - name: Upload binary to release
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ${{ matrix.platform.asset_name }}
+          asset_name: ${{ matrix.platform.asset_name }}
+          tag: ${{ github.ref }}
+          overwrite: true
+
+      - name: Upload SHA256 checksum
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: ${{ matrix.platform.asset_name }}.sha256
+          asset_name: ${{ matrix.platform.asset_name }}.sha256
+          tag: ${{ github.ref }}
+          overwrite: true
+
+  release-summary:
+    name: Generate Release Summary
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate release summary
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          {
+            echo "# Release $RELEASE_TAG"
+            echo
+            echo '| Binary | SHA256 |'
+            echo '|--------|--------|'
+            for asset in layerlock-linux-x86_64 layerlock-linux-x86_64-musl layerlock-macos-x86_64 layerlock-macos-aarch64 layerlock-windows-x86_64.exe; do
+              url="https://github.com/$REPOSITORY/releases/download/$RELEASE_TAG/$asset"
+              echo "| [$asset]($url) | [checksum]($url.sha256) |"
+            done
+            echo
+            echo 'Download the binary and checksum for your platform. On Linux/macOS, verify with `shasum -a 256 -c <asset>.sha256`, then rename to `layerlock`, run `chmod +x layerlock`, and move it onto your PATH.'
+            echo
+            echo 'On Windows, compare `Get-FileHash <asset> -Algorithm SHA256` with the checksum file, rename the binary to `layerlock.exe`, and place it on your PATH.'
+          } >> "$GITHUB_STEP_SUMMARY"

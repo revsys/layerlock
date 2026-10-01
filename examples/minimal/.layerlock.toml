@@ -1,0 +1,8 @@
+dockerfiles = ["Dockerfile"]
+
+[groups.python-base]
+dependencies = ["requirements.txt"]
+dockerfile = "Dockerfile.base"
+repository = "ghcr.io/example/layerlock-python-base"
+context = "."
+platforms = ["linux/amd64"]

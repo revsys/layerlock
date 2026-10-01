@@ -1,0 +1,19 @@
+[package]
+name = "layerlock"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+description = "Content-addressed dependency images for Docker builds"
+
+[dependencies]
+anyhow = "1"
+base64 = "0.22"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+clap = { version = "4", features = ["derive", "env"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+similar = "2"
+toml = "0.9"
+tempfile = "3"
