@@ -12,6 +12,28 @@ use std::{
     time::Duration,
 };
 
+fn write_error(out: &mut impl Write, message: &str, color: bool) -> io::Result<()> {
+    let heading = "error:";
+    let width = message
+        .lines()
+        .map(|line| line.chars().count())
+        .chain([heading.len()])
+        .max()
+        .unwrap();
+    let border = format!("+{}+", "-".repeat(width + 2));
+    let (red, reset) = if color {
+        ("\x1b[1;31m", "\x1b[0m")
+    } else {
+        ("", "")
+    };
+    writeln!(out, "{red}{border}{reset}")?;
+    for line in std::iter::once(heading).chain(message.lines()) {
+        let padding = " ".repeat(width - line.chars().count());
+        writeln!(out, "{red}|{reset} {line}{padding} {red}|{reset}")?;
+    }
+    writeln!(out, "{red}{border}{reset}")
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse_runtime();
     let mut report = plan::Report::new(&cli.command);
@@ -98,8 +120,18 @@ fn main() -> ExitCode {
                     )?;
                 }
             }
+            let stderr = io::stderr();
+            let error_color = match cli.color {
+                Color::Always => true,
+                Color::Never => false,
+                Color::Auto => {
+                    stderr.is_terminal()
+                        && std::env::var_os("NO_COLOR").is_none_or(|s| s.is_empty())
+                }
+            };
+            let mut err = stderr.lock();
             for error in &report.errors {
-                eprintln!("error: {error}");
+                write_error(&mut err, error, error_color)?;
             }
             Ok::<_, io::Error>(())
         })(),

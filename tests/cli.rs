@@ -143,6 +143,42 @@ fn missing_config_and_unknown_groups_have_structured_errors() {
     }
 }
 #[test]
+fn empty_dependencies_explains_fix_in_a_color_aware_box() {
+    let dir = fixture("example.com");
+    let path = dir.path().join(".layerlock.toml");
+    let config = fs::read_to_string(&path).unwrap();
+    fs::write(&path, config.replace("['deps']", "[]")).unwrap();
+
+    for (mode, colored) in [("always", true), ("never", false), ("auto", false)] {
+        let output = configured(dir.path())
+            .env("NO_COLOR", "1")
+            .args(["check", "--color", mode])
+            .output()
+            .unwrap();
+        assert_eq!(output.status.code(), Some(2));
+        assert!(output.stdout.is_empty());
+        let error = String::from_utf8(output.stderr).unwrap();
+        assert!(error.contains("+---"));
+        assert!(error.contains("group a: dependencies must not be empty"));
+        assert!(error.contains("one or more files"));
+        assert!(error.contains("package.json"));
+        assert!(error.contains("dependencies = [\"requirements.txt\"]"));
+        assert_eq!(error.contains('\u{1b}'), colored);
+    }
+
+    let output = configured(dir.path())
+        .args(["check", "--output", "json", "--color", "always"])
+        .output()
+        .unwrap();
+    let report = json(&output, 2);
+    let error = report["errors"][0].as_str().unwrap();
+    assert!(error.contains("one or more files"));
+    assert!(!error.contains('\u{1b}'));
+    assert!(!error.contains("+---"));
+    assert!(output.stderr.is_empty());
+}
+
+#[test]
 fn help_lists_environment_variables() {
     let output = command().args(["check", "--help"]).output().unwrap();
     assert!(output.status.success());

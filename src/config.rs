@@ -78,7 +78,13 @@ impl LoadedConfig {
             );
             ensure!(
                 !group.dependencies.is_empty(),
-                "group {name}: dependencies must not be empty"
+                "group {name}: dependencies must not be empty\n\n\
+                 Add one or more files that declare installed dependencies,\n\
+                 such as requirements.txt, package.json, or a lockfile.\n\n\
+                 In [groups.{name}], for example:\n\
+                 dependencies = [\"requirements.txt\"]\n\n\
+                 Paths are relative to your Layerlock config file.\n\
+                 Layerlock hashes these files to detect dependency changes."
             );
             group.dependencies = normalized_unique(&group.dependencies)?;
             group.dockerfile = normalize_path(&group.dockerfile)?;

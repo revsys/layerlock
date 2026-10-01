@@ -67,6 +67,10 @@ A small example lives in `examples/minimal/`. Change its placeholder repository 
 layerlock check --config examples/minimal/.layerlock.toml
 ```
 
+For a simple 30-second test build, use [`examples/playground/`](examples/playground/).
+Set its config's repository to one you can push to, then run `layerlock sync` from
+that folder.
+
 ## Runtime options
 
 Options are global and work before or after the subcommand. CLI arguments override environment values, which override defaults. CLI group selections replace the entire environment group list.
